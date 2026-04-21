@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Contacts Pro</title>
+
+    <style>
+        /* ========================================================= */
+        /* NEUMORPHIC DARK THEME UI                                  */
+        /* ========================================================= */
+        :root {
+            --bg: #1b1d21;
+            --surface: #23262a;
+            --accent: #00e676;
+            --fav: #ffca28; /* Gold color for favorites */
+            --shadow-out: 8px 8px 16px #131518, -8px -8px 16px #23252a;
+            --shadow-in: inset 4px 4px 8px #131518, inset -4px -4px 8px #23252a;
+            --text: #e0e0e0;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .phone-container {
+            width: 100%;
+            max-width: 420px;
+            background: var(--surface);
+            border-radius: 30px;
+            padding: 25px;
+            box-shadow: var(--shadow-out);
+        }
+
+        h2 { text-align: center; color: var(--accent); letter-spacing: 1px; }
+
+        /* Input & Select Styling */
+        input, select {
+            width: 100%;
+            background: var(--surface);
+            border: none;
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 10px;
+            box-shadow: var(--shadow-in);
+            color: white;
+            box-sizing: border-box;
+            outline: none;
+        }
+
+        /* Button Styling */
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+        
+        button {
+            background: var(--surface);
+            color: var(--text);
+            border: none;
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: var(--shadow-out);
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+            font-size: 11px;
+        }
+
+        button:active { box-shadow: var(--shadow-in); transform: scale(0.98); }
+        .btn-save { background: var(--accent); color: #000; }
+
+        /* Contact Card Styling */
+        .contact-card {
+            background: var(--surface);
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: var(--shadow-out);
+            position: relative;
+            border-left: 4px solid var(--accent);
+            transition: 0.3s;
+        }
+
+        /* Highlight for Favorite contacts */
+        .contact-card.is-fav {
+            border-left: 4px solid var(--fav);
+            box-shadow: 0 0 15px rgba(255, 202, 40, 0.15), var(--shadow-out);
+        }
+
+        .contact-header { display: flex; align-items: center; justify-content: space-between; }
+        
+        /* Status Dot (Relationship Health) */
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .fresh { background: #00e676; box-shadow: 0 0 8px #00e676; }
+        .waiting { background: #ff9100; box-shadow: 0 0 8px #ff9100; }
+        .stale { background: #ff5252; box-shadow: 0 0 8px #ff5252; }
+
+        .card-actions { margin-top: 15px; display: flex; gap: 8px; flex-wrap: wrap; }
+        
+        .cat-tag { font-size: 10px; background: #333; padding: 2px 6px; border-radius: 4px; color: var(--accent); }
+        
+        /* Favorite Star icon */
+        .fav-star { cursor: pointer; font-size: 1.3rem; color: #444; transition: 0.3s; }
+        .fav-star.active { color: var(--fav); text-shadow: 0 0 10px var(--fav); }
+
+        #search { margin-top: 25px; border: 1px solid #333; }
+    </style>
+</head>
+<body>
+
+<div class="phone-container">
+    <h2>NEXUS CONTACTS</h2>
+
+    <input type="hidden" id="editIdx">
+
+    <div class="input-group">
+        <input type="text" id="nameInp" placeholder="Full Name">
+        <input type="text" id="phoneInp" placeholder="Phone Number">
+        <input type="email" id="emailInp" placeholder="Email Address">
+        
+        <select id="catInp">
+            <option value="General">General</option>
+            <option value="Family">Family</option>
+            <option value="Work">Work</option>
+            <option value="Friends">Friends</option>
+        </select>
+        
+        <div class="btn-grid">
+            <button class="btn-save" id="saveBtnText" onclick="handleSave()">Save Contact</button>
+            <button onclick="downloadBackup()">Export Data</button>
+        </div>
+    </div>
+
+    <input type="text" id="search" placeholder="🔍 Search contacts..." onkeyup="renderList()">
+
+    <div id="nudgeContainer" style="margin-top:20px;"></div>
+
+    <div id="contactContainer"></div>
+</div>
+
+<script>
+    // --- STEP 1: INITIALIZE DATA FROM LOCALSTORAGE ---
+    let contacts = JSON.parse(localStorage.getItem("nexus_contacts")) || [];
+
+    // --- STEP 2: SAVE OR UPDATE CONTACT LOGIC ---
+    function handleSave() {
+        const name = document.getElementById("nameInp").value;
+        const phone = document.getElementById("phoneInp").value;
+        const email = document.getElementById("emailInp").value;
+        const category = document.getElementById("catInp").value;
+        const idx = document.getElementById("editIdx").value;
+
+        if (!name || !phone) return alert("Name and Phone are required!");
+
+        const contactObj = {
+            name, 
+            phone, 
+            email: email || "No Email",
+            category,
+            lastContacted: Date.now(),
+            isFavorite: idx !== "" ? contacts[idx].isFavorite : false 
+        };
+
+        if (idx === "") {
+            // New Contact
+            contacts.push(contactObj);
+        } else {
+            // Update Existing Contact
+            contacts[idx] = contactObj;
+            document.getElementById("editIdx").value = "";
+            document.getElementById("saveBtnText").innerText = "Save Contact";
+        }
+
+        syncStorage();
+        resetForm();
+        renderList();
+    }
+
+    // --- STEP 3: RENDER THE LIST (Sorted by Favorites first) ---
+    function renderList() {
+        const container = document.getElementById("contactContainer");
+        const query = document.getElementById("search").value.toLowerCase();
+        container.innerHTML = "";
+
+        // CREATIVE LOGIC: Create a mapped array to keep track of real indexes while sorting
+        let sortedContacts = contacts.map((c, i) => ({...c, originalIndex: i}));
+        
+        // Sort: Favorites (true) float to the top
+        sortedContacts.sort((a, b) => b.isFavorite - a.isFavorite);
+
+        sortedContacts.forEach((c) => {
+            // Filter by search query
+            if (!c.name.toLowerCase().includes(query)) return;
+
+            // TRACKER LOGIC: Determine relationship health status
+            const hoursSince = (Date.now() - c.lastContacted) / 3600000;
+            let status = "fresh";
+            if (hoursSince > 24) status = "waiting";
+            if (hoursSince > 48) status = "stale";
+
+            const card = document.createElement("div");
+            card.className = `contact-card ${c.isFavorite ? 'is-fav' : ''}`;
+            card.innerHTML = `
+                <div class="contact-header">
+                    <div>
+                        <span class="status-dot ${status}"></span>
+                        <strong>${c.name}</strong> 
+                        <span class="cat-tag">${c.category}</span>
+                    </div>
+                    <span class="fav-star ${c.isFavorite ? 'active' : ''}" onclick="toggleFavorite(${c.originalIndex})">★</span>
+                </div>
+                <div style="font-size: 13px; color: #aaa; margin-top: 8px;">
+                    📞 ${c.phone} | 📧 ${c.email}
+                </div>
+                <div class="card-actions">
+                    <button onclick="prepEdit(${c.originalIndex})">Edit</button>
+                    <button onclick="logInteraction(${c.originalIndex})">📞 Call</button>
+                    <button onclick="shareContact(${c.originalIndex})" style="color: #00e676;">🔗 Share</button>
+                    <button style="color:#ff5252" onclick="removeContact(${c.originalIndex})">Del</button>
+                </div>
+            `;
+            container.appendChild(card);
+        });
+
+        renderNudges();
+    }
+
+    // --- FEATURE 1: SHARE CONTACT (Web Share API) ---
+    async function shareContact(i) {
+        const c = contacts[i];
+        const shareText = `Name: ${c.name}\nPhone: ${c.phone}\nEmail: ${c.email}\nShared via Nexus Pro`;
+
+        if (navigator.share) {
+            try {
+                await navigator.share({ title: 'Contact Details', text: shareText });
+            } catch (err) { console.log("Share failed", err); }
+        } else {
+            // Fallback: Copy to clipboard if sharing is not supported (e.g., Desktop)
+            navigator.clipboard.writeText(shareText);
+            alert("Contact details copied to clipboard!");
+        }
+    }
+
+    // --- FEATURE 2: FAVORITE TOGGLE ---
+    function toggleFavorite(i) {
+        contacts[i].isFavorite = !contacts[i].isFavorite;
+        syncStorage();
+        renderList();
+    }
+
+    // --- TRACKER & NUDGES (The "Relationship AI") ---
+    function renderNudges() {
+        const nudgeContainer = document.getElementById("nudgeContainer");
+        const staleContacts = contacts.filter(c => (Date.now() - c.lastContacted) / 3600000 > 48);
+
+        if (staleContacts.length === 0) {
+            nudgeContainer.innerHTML = "";
+            return;
+        }
+
+        nudgeContainer.innerHTML = `
+            <div style="background: var(--surface); padding: 15px; border-radius: 15px; box-shadow: var(--shadow-out); border-left: 4px solid #ff5252;">
+                <h3 style="color: #ff5252; margin: 0 0 10px 0; font-size: 16px;">🤖 Smart Nudge</h3>
+                <p style="margin: 0; font-size: 12px; opacity: 0.8;">
+                    You haven't interacted with ${staleContacts.length} contact(s) in over 48 hours. Time to reconnect!
+                </p>
+            </div>
+        `;
+    }
+
+    // --- LOG INTERACTION (Updates timestamp) ---
+    function logInteraction(i) {
+        contacts[i].lastContacted = Date.now();
+        syncStorage();
+        renderList();
+        alert("Interaction logged for " + contacts[i].name);
+    }
+
+    // --- UTILITIES (Edit, Delete, Storage) ---
+    function prepEdit(i) {
+        const c = contacts[i];
+        document.getElementById("nameInp").value = c.name;
+        document.getElementById("phoneInp").value = c.phone;
+        document.getElementById("emailInp").value = c.email === "No Email" ? "" : c.email;
+        document.getElementById("catInp").value = c.category;
+        document.getElementById("editIdx").value = i;
+        document.getElementById("saveBtnText").innerText = "Update Contact";
+        window.scrollTo(0, 0); // Scroll to top to see the edit form
+    }
+
+    function removeContact(i) {
+        if (confirm("Permanently delete " + contacts[i].name + "?")) {
+            contacts.splice(i, 1);
+            syncStorage();
+            renderList();
+        }
+    }
+
+    function syncStorage() {
+        localStorage.setItem("nexus_contacts", JSON.stringify(contacts));
+    }
+
+    function resetForm() {
+        document.getElementById("nameInp").value = "";
+        document.getElementById("phoneInp").value = "";
+        document.getElementById("emailInp").value = "";
+        document.getElementById("editIdx").value = "";
+        document.getElementById("saveBtnText").innerText = "Save Contact";
+    }
+
+    function downloadBackup() {
+        const data = JSON.stringify(contacts, null, 2);
+        const blob = new Blob([data], { type: "application/json" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "nexus_contacts_backup.json";
+        a.click();
+    }
+
+    // Initial Render
+    renderList();
+</script>
+
+</body>
+</html>
